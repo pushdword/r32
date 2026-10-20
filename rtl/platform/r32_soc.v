@@ -1,30 +1,202 @@
 // SPDX-License-Identifier: MIT
 // R32 protected SoC, 50MHz CPU/SDRAM/timer, independent 40MHz text scanout.
-module r32_soc #(parameter INIT_FILE="firmware.hex",parameter CLKS_PER_BIT=260)(
- input wire clk,reset,system_clk,system_reset,uart_rx,output wire uart_tx,
- output wire sdram_init_done,output wire sdram_rank,output wire [12:0] sdram_address,output wire [1:0] sdram_bank,
- output wire sdram_ras_n,sdram_cas_n,sdram_we_n,output wire [1:0] sdram_dqm,
- output wire [15:0] sdram_dq_out,output wire sdram_dq_oe,input wire [15:0] sdram_dq_in,
- input wire pixel_clk,pixel_reset,video_locked,output wire [26:0] pixel,
- input wire [3:0] pmod_inputs,output wire [5:0] pmod_outputs,
- output wire video_mode1024,output wire sd_sck,sd_mosi,sd_cs_n,input wire sd_miso,sd_cd_n,
- output wire halted,trap_valid,output wire [31:0] trap_pc,trap_cause,trap_address
-);
- wire iv,ir,rv,rr,ie,dv,dr,ds,dsr,de,dw;wire [31:0] ia,id,da,dd,rd;wire [3:0] db;
- wire timer_irq,ipi_irq,uart_irq;wire [2:0] cpu_pending,soc_accept;wire [31:0] irq={29'b0,cpu_pending};
- wire [2:0] accepted={trap_valid&&trap_cause==32'h80000002,trap_valid&&trap_cause==32'h80000001,trap_valid&&trap_cause==32'h80000000};
- r32_irq_cdc irq_bridge(clk,system_clk,reset,system_reset,{uart_irq,ipi_irq,timer_irq},accepted,cpu_pending,soc_accept);
- wire ret,store;wire [31:0] pc,word,npc,value,sa,sd;wire [4:0] dest;wire [3:0] sb;wire [63:0] cycles,instret;
- r32_core #(.ENABLE_MMU(1),.CPU_HZ(50000000),.SYSTEM_HZ(30000000)) cpu(clk,reset,iv,ir,ia,rv,rr,id,ie,dv,dr,da,dd,db,dw,ds,dsr,rd,de,irq,
-  ret,pc,word,npc,dest,value,store,sa,sd,sb,trap_valid,trap_pc,trap_cause,trap_address,halted,cycles,instret);
- wire qv,qr,qw,sv,sr,se,mv,mr,mw,ms,msr,me;wire [31:0] qa,qd,crdata,ma,md,mrd;wire [3:0] qb,mb;
- r32_cpu_merge merge(clk,reset,iv,ir,ia,rv,rr,id,ie,dv,dr,da,dd,db,dw,ds,dsr,rd,de,qv,qr,qa,qd,qb,qw,sv,sr,crdata,se);
- wire unused_cr,unused_sr;
- x32_v2_bus_cdc #(.EXTERNAL_RESETS(1)) memory_bridge(clk,system_clk,reset|system_reset,reset,system_reset,unused_cr,unused_sr,
-  qv,qr,qa,qd,qb,qw,sv,sr,crdata,se,mv,mr,ma,md,mb,mw,ms,msr,mrd,me);
- wire unused_ir,unused_rv,unused_ie;wire [31:0] unused_id;
- r32_soc_bus #(.INIT_FILE(INIT_FILE),.CLKS_PER_BIT(CLKS_PER_BIT)) bus(system_clk,system_reset,uart_rx,uart_tx,
-  1'b0,unused_ir,32'b0,unused_rv,1'b1,unused_id,unused_ie,mv,mr,ma,md,mb,mw,ms,msr,mrd,me,timer_irq,soc_accept[0],ipi_irq,soc_accept[1],uart_irq,
-  sdram_init_done,sdram_rank,sdram_address,sdram_bank,sdram_ras_n,sdram_cas_n,sdram_we_n,sdram_dqm,sdram_dq_out,sdram_dq_oe,sdram_dq_in,
-  pixel_clk,pixel_reset,video_locked,pixel,pmod_inputs,pmod_outputs,video_mode1024,sd_sck,sd_mosi,sd_cs_n,sd_miso,sd_cd_n);
+module r32_soc
+    #(parameter INIT_FILE = "firmware.hex",
+      parameter CLKS_PER_BIT = 260)
+    (input wire clk, reset, system_clk, system_reset, uart_rx,
+     output wire uart_tx,
+     output wire sdram_init_done,
+     output wire sdram_rank,
+     output wire [12 : 0] sdram_address,
+     output wire [1 : 0] sdram_bank,
+     output wire sdram_ras_n, sdram_cas_n, sdram_we_n,
+     output wire [1 : 0] sdram_dqm,
+     output wire [15 : 0] sdram_dq_out,
+     output wire sdram_dq_oe,
+     input wire [15 : 0] sdram_dq_in,
+     input wire pixel_clk, pixel_reset, video_locked,
+     output wire [26 : 0] pixel,
+     input wire [3 : 0] pmod_inputs,
+     output wire [5 : 0] pmod_outputs,
+     output wire video_mode1024,
+     output wire sd_sck, sd_mosi, sd_cs_n,
+     input wire sd_miso, sd_cd_n,
+     output wire halted, trap_valid,
+     output wire [31 : 0] trap_pc, trap_cause, trap_address);
+    wire iv, ir, rv, rr, ie, dv, dr, ds, dsr, de, dw;
+    wire [31 : 0] ia, id, da, dd, rd;
+    wire [3 : 0] db;
+    wire timer_irq, ipi_irq, uart_irq;
+    wire [2 : 0] cpu_pending, soc_accept;
+    wire [31 : 0] irq = {29'b0, cpu_pending};
+    wire [2 : 0] accepted = {trap_valid && trap_cause == 32'h80000002,
+                             trap_valid && trap_cause == 32'h80000001,
+                             trap_valid && trap_cause == 32'h80000000};
+    r32_irq_cdc irq_bridge(clk,
+                           system_clk,
+                           reset,
+                           system_reset,
+                           {uart_irq, ipi_irq, timer_irq},
+                           accepted,
+                           cpu_pending,
+                           soc_accept);
+    wire ret, store;
+    wire [31 : 0] pc, word, npc, value, sa, sd;
+    wire [4 : 0] dest;
+    wire [3 : 0] sb;
+    wire [63 : 0] cycles, instret;
+    r32_core #(.ENABLE_MMU(1),
+               .CPU_HZ(50000000),
+               .SYSTEM_HZ(30000000))
+        cpu(clk,
+            reset,
+            iv,
+            ir,
+            ia,
+            rv,
+            rr,
+            id,
+            ie,
+            dv,
+            dr,
+            da,
+            dd,
+            db,
+            dw,
+            ds,
+            dsr,
+            rd,
+            de,
+            irq,
+            ret,
+            pc,
+            word,
+            npc,
+            dest,
+            value,
+            store,
+            sa,
+            sd,
+            sb,
+            trap_valid,
+            trap_pc,
+            trap_cause,
+            trap_address,
+            halted,
+            cycles,
+            instret);
+    wire qv, qr, qw, sv, sr, se, mv, mr, mw, ms, msr, me;
+    wire [31 : 0] qa, qd, crdata, ma, md, mrd;
+    wire [3 : 0] qb, mb;
+    r32_cpu_merge merge(clk,
+                        reset,
+                        iv,
+                        ir,
+                        ia,
+                        rv,
+                        rr,
+                        id,
+                        ie,
+                        dv,
+                        dr,
+                        da,
+                        dd,
+                        db,
+                        dw,
+                        ds,
+                        dsr,
+                        rd,
+                        de,
+                        qv,
+                        qr,
+                        qa,
+                        qd,
+                        qb,
+                        qw,
+                        sv,
+                        sr,
+                        crdata,
+                        se);
+    wire unused_cr, unused_sr;
+    x32_v2_bus_cdc #(.EXTERNAL_RESETS(1))
+        memory_bridge(clk,
+                      system_clk,
+                      reset | system_reset,
+                      reset,
+                      system_reset,
+                      unused_cr,
+                      unused_sr,
+                      qv,
+                      qr,
+                      qa,
+                      qd,
+                      qb,
+                      qw,
+                      sv,
+                      sr,
+                      crdata,
+                      se,
+                      mv,
+                      mr,
+                      ma,
+                      md,
+                      mb,
+                      mw,
+                      ms,
+                      msr,
+                      mrd,
+                      me);
+    wire unused_ir, unused_rv, unused_ie;
+    wire [31 : 0] unused_id;
+    r32_soc_bus #(.INIT_FILE(INIT_FILE),
+                  .CLKS_PER_BIT(CLKS_PER_BIT))
+        bus(system_clk,
+            system_reset,
+            uart_rx,
+            uart_tx,
+            1'b0,
+            unused_ir,
+            32'b0,
+            unused_rv,
+            1'b1,
+            unused_id,
+            unused_ie,
+            mv,
+            mr,
+            ma,
+            md,
+            mb,
+            mw,
+            ms,
+            msr,
+            mrd,
+            me,
+            timer_irq,
+            soc_accept[0],
+            ipi_irq,
+            soc_accept[1],
+            uart_irq,
+            sdram_init_done,
+            sdram_rank,
+            sdram_address,
+            sdram_bank,
+            sdram_ras_n,
+            sdram_cas_n,
+            sdram_we_n,
+            sdram_dqm,
+            sdram_dq_out,
+            sdram_dq_oe,
+            sdram_dq_in,
+            pixel_clk,
+            pixel_reset,
+            video_locked,
+            pixel,
+            pmod_inputs,
+            pmod_outputs,
+            video_mode1024,
+            sd_sck,
+            sd_mosi,
+            sd_cs_n,
+            sd_miso,
+            sd_cd_n);
 endmodule
