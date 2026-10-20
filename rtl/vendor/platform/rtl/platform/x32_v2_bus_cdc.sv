@@ -1,4 +1,4 @@
-// V2 experiment only: single-outstanding held-payload CPU/SoC clock crossing.
+// Single-outstanding held-payload CPU/SoC clock crossing.
 // Common reset asserts asynchronously and releases synchronously in each domain.
 // A reset aborts a pending response; an already accepted write is not rolled back.
 module x32_v2_bus_cdc
@@ -25,7 +25,7 @@ module x32_v2_bus_cdc
      input wire [31 : 0] m_rsp_rdata,
      input wire m_rsp_error);
     // Constrain the first toggle synchronizer stages as asynchronous crossings;
-    // held payloads need max-delay bounds (see ../fpu/CDC_CONTRACT.md).
+    // held payloads need max-delay bounds between the source and capture registers.
     (* ASYNC_REG = "TRUE" *) reg [1 : 0] cpu_reset_sync, soc_reset_sync;
     generate
         if (EXTERNAL_RESETS)
