@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
-// R32 protected SoC, 50MHz CPU/SDRAM/timer, independent 40MHz text scanout.
+// R32 protected SoC with 50 MHz CPU, 30 MHz peripherals and independent text scanout.
 module r32_soc
     #(parameter INIT_FILE = "firmware.hex",
-      parameter CLKS_PER_BIT = 260)
+      parameter CLKS_PER_BIT = 260,
+      parameter ENABLE_CRYPTO = 0)
     (input wire clk, reset, system_clk, system_reset, uart_rx,
      output wire uart_tx,
      output wire sdram_init_done,
@@ -151,7 +152,8 @@ module r32_soc
     wire unused_ir, unused_rv, unused_ie;
     wire [31 : 0] unused_id;
     r32_soc_bus #(.INIT_FILE(INIT_FILE),
-                  .CLKS_PER_BIT(CLKS_PER_BIT))
+                  .CLKS_PER_BIT(CLKS_PER_BIT),
+                  .ENABLE_CRYPTO(ENABLE_CRYPTO))
         bus(system_clk,
             system_reset,
             uart_rx,

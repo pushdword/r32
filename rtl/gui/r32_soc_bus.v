@@ -3,7 +3,8 @@
 // A held fetch response must not block a data access needed to drain the pipeline.
 module r32_soc_bus
     #(parameter INIT_FILE = "firmware.hex",
-      parameter CLKS_PER_BIT = 260)
+      parameter CLKS_PER_BIT = 260,
+      parameter ENABLE_CRYPTO = 0)
     (input wire clk, reset, uart_rx,
      output wire uart_tx,
      input wire iv,
@@ -53,19 +54,20 @@ module r32_soc_bus
     wire choose_d = dv && !ds;
     assign dr = !reset && state == 0 && choose_d;
     assign ir = !reset && state == 0 && !choose_d && !rv;
-    wire [3 : 0] target = address[31 : 12] == 20'hf0005   ? 8
-                          : address[31 : 26] == 6'b000100 ? 1
-                          : address[31 : 12] == 20'hf0001 ? 2
-                          : address[31 : 12] == 20'hf0002 ? 3
-                          : address[31 : 15] == 17'h1e002 ? 4
-                          : address[31 : 12] == 20'hf0004 ? 5
-                          : address[31 : 12] == 20'hf0006 ? 6
-                          : address[31 : 12] == 20'hf0007 ? 7
-                                                          : 0;
-    wire [8 : 0] ready, valid, error;
-    wire [31 : 0] values[0 : 8];
-    wire [8 : 0] requests, consume;
-    for (genvar n = 0; n < 9; n = n + 1)
+    wire [3 : 0] target = ENABLE_CRYPTO && address[31 : 12] == 20'hf0003 ? 9
+                          : address[31 : 12] == 20'hf0005                ? 8
+                          : address[31 : 26] == 6'b000100                ? 1
+                          : address[31 : 12] == 20'hf0001                ? 2
+                          : address[31 : 12] == 20'hf0002                ? 3
+                          : address[31 : 15] == 17'h1e002                ? 4
+                          : address[31 : 12] == 20'hf0004                ? 5
+                          : address[31 : 12] == 20'hf0006                ? 6
+                          : address[31 : 12] == 20'hf0007                ? 7
+                                                                         : 0;
+    wire [9 : 0] ready, valid, error;
+    wire [31 : 0] values[0 : 9];
+    wire [9 : 0] requests, consume;
+    for (genvar n = 0; n < 10; n = n + 1)
     begin : route
         assign requests[n] = state == 1 && target == n && !reset;
         assign consume[n] = state == 2 && target == n && !reset;
@@ -130,9 +132,12 @@ module r32_soc_bus
               timer_irq,
               timer_accept);
     wire [31 : 0] hwdt_data;
-    assign values[3] = address[11 : 2] == 14 ? 32'd50000000 : hwdt_data;
+    assign values[3] = hwdt_data;
     x32_hw_table #(.RAM_WORDS(8192),
                    .CLOCK_HZ(30000000),
+                   .CPU_CLOCK_HZ(50000000),
+                   .ENABLE_CRYPTO(ENABLE_CRYPTO),
+                   .ENABLE_CURVE(ENABLE_CRYPTO),
                    .ENABLE_BOARD_IO(1),
                    .ENABLE_VIDEO_MODES(1),
                    .ENABLE_PMOD(1),
@@ -242,6 +247,30 @@ module r32_soc_bus
                           keyboard_error,
                           keyboard_report,
                           keyboard_data);
+    generate
+        if (ENABLE_CRYPTO)
+        begin : crypto_io
+            r32_crypto_bus crypto(clk,
+                                  reset,
+                                  requests[9],
+                                  ready[9],
+                                  address[11 : 0],
+                                  data,
+                                  be,
+                                  writing,
+                                  valid[9],
+                                  consume[9],
+                                  values[9],
+                                  error[9]);
+        end
+        else
+        begin : no_crypto
+            assign ready[9] = 1'b0;
+            assign valid[9] = 1'b0;
+            assign values[9] = 32'b0;
+            assign error[9] = 1'b0;
+        end
+    endgenerate
     always @(posedge clk)
     begin
         if (reset)

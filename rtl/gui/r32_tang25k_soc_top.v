@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Same TXT2, PLLA/DCS/CLKDIV, TMDS and OSER10 configuration as X32.
 module r32_tang25k_soc_top
-    #(parameter INIT_FILE = "firmware.hex")
+    #(parameter INIT_FILE = "firmware.hex",
+      parameter ENABLE_CRYPTO = 0)
     (input wire clk, reset_button, uart_rx,
      output wire uart_tx,
      output wire sdram_clk, sdram_rank,
@@ -138,7 +139,8 @@ module r32_tang25k_soc_top
     assign rtc_sda = pmod_outputs[5] ? 1'b0 : 1'bz;
     wire initialized, halted, trap;
     wire [31 : 0] tpc, tcause, taddress;
-    r32_soc #(.INIT_FILE(INIT_FILE))
+    r32_soc #(.INIT_FILE(INIT_FILE),
+              .ENABLE_CRYPTO(ENABLE_CRYPTO))
         soc(clk,
             reset,
             system_clk,

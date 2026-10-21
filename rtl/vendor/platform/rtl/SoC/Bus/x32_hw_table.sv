@@ -1,8 +1,8 @@
 // Read-only hardware description generated from this SoC's composition.
-// Full aligned dword reads only; malformed requests and writes return bus error.
+// Return a bus error for writes and reads that are not aligned full dwords.
 module x32_hw_table
     #(parameter integer RAM_WORDS = 4096,
-      parameter [31 : 0] CLOCK_HZ = 50000000, UART_BAUD = 115200,
+      parameter [31 : 0] CPU_CLOCK_HZ = 50000000, CLOCK_HZ = 50000000, UART_BAUD = 115200,
       parameter [31 : 0] MAGIC = 32'h54445748,
       parameter ENABLE_BOARD_IO = 0,
       parameter ENABLE_KEYBOARD = 0,
@@ -10,7 +10,8 @@ module x32_hw_table
       parameter ENABLE_PMOD = 0,
       parameter ENABLE_BIOS_FLASH = 0,
       parameter ENABLE_VIDEO_MODES = 0,
-      parameter ENABLE_CRYPTO = 0)
+      parameter ENABLE_CRYPTO = 0,
+      parameter ENABLE_CURVE = 0)
     (input wire clk, reset, req_valid,
      output wire req_ready,
      input wire [11 : 0] req_offset,
@@ -26,9 +27,10 @@ module x32_hw_table
     localparam integer PMOD_INDEX = 8 + (BASE_COUNT + (CORE_COUNT == 2 ? 2 : 0)) * 8;
     localparam integer FLASH_INDEX = PMOD_INDEX + (ENABLE_PMOD ? 8 : 0);
     localparam integer CRYPTO_INDEX = FLASH_INDEX + (ENABLE_BIOS_FLASH ? 8 : 0);
+    localparam integer CURVE_INDEX = CRYPTO_INDEX + (ENABLE_CRYPTO ? 8 : 0);
     localparam integer RECORD_COUNT = BASE_COUNT + (CORE_COUNT == 2 ? 2 : 0) +
                                       (ENABLE_PMOD ? 1 : 0) + (ENABLE_BIOS_FLASH ? 1 : 0) +
-                                      (ENABLE_CRYPTO ? 1 : 0);
+                                      (ENABLE_CRYPTO ? 1 : 0) + (ENABLE_CURVE ? 1 : 0);
     wire [31 : 0] word_index = {22'b0, req_offset[11 : 2]};
     reg [31 : 0] word_data;
     always_comb
@@ -47,7 +49,7 @@ module x32_hw_table
                 word_data = 32 + RECORD_COUNT * 32;
             6:
                 word_data = CLOCK_HZ;
-            // CPU: no memory window/IRQ of its own; clock in parameter0.
+            // CPU clock is in parameter0. The CPU record has no memory window or IRQ.
             8:
                 word_data = 1;
             10:
@@ -55,7 +57,7 @@ module x32_hw_table
             13:
                 word_data = NONE;
             14:
-                word_data = CLOCK_HZ;
+                word_data = CPU_CLOCK_HZ;
             // On-chip boot RAM, size follows the actual synthesis parameter.
             16:
                 word_data = 2;
@@ -102,7 +104,7 @@ module x32_hw_table
                 word_data = 32;
             46:
                 word_data = CLOCK_HZ;
-            // Text/TMDS controller; no HPD/DDC connection advertised.
+            // Text/TMDS controller with HPD/DDC unavailable.
             48:
                 word_data = 6;
             50:
@@ -243,6 +245,28 @@ module x32_hw_table
                     word_data = CLOCK_HZ;
                 7:
                     word_data = 3;
+                default:
+                    word_data = 0;
+            endcase
+        end
+        if (ENABLE_CURVE && word_index >= CURVE_INDEX)
+        begin
+            word_data = 0;
+            case (word_index - CURVE_INDEX)
+                0:
+                    word_data = 13;
+                2:
+                    word_data = 1;
+                3:
+                    word_data = 32'hf0003100;
+                4:
+                    word_data = 192;
+                5:
+                    word_data = NONE;
+                6:
+                    word_data = CLOCK_HZ;
+                7:
+                    word_data = 7;
                 default:
                     word_data = 0;
             endcase

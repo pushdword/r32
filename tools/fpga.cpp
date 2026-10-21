@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -68,6 +69,10 @@ int main(int argc, char **argv)
             throw std::runtime_error(
                 "Usage: fpga-build TOOL OUT TOP DEVICE CST SDC BOOT SOURCE...");
         std::string tool = argv[1], top = argv[3], device = argv[4];
+        const char *configured_place = std::getenv("R32_FPGA_PLACE");
+        std::string placement = configured_place ? configured_place : "3";
+        if (placement != "2" && placement != "3" && placement != "4")
+            throw std::runtime_error("FPGA placement must be 2, 3 or 4");
         if (top.empty() || device.empty() ||
             top.find_first_not_of(
                 "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") !=
@@ -109,7 +114,9 @@ int main(int argc, char **argv)
         f << "add_file -type cst " << quote(argv[5]) << "\nadd_file -type sdc " << quote(argv[6])
           << "\nset_option -synthesis_tool gowinsynthesis\nset_option -top_module " << top
           << "\nset_option -verilog_std sysv2017\nset_option -output_base_name " << top
-          << "\nset_option -rw_check_on_ram 1\nset_option -looplimit 10000\nset_option -place_option 3\nset_option -route_option 2\nset_option -timing_driven 1\nset_option -correct_hold_violation 1\nset_option -gen_text_timing_rpt 1\nset_option -use_cpu_as_gpio 1\nset_option -use_i2c_as_gpio 1\nset_option -use_mspi_as_gpio 1\nset_option -gen_sdf 1\nset_option -gen_verilog_sim_netlist 1\nrun all\n";
+          << "\nset_option -rw_check_on_ram 1\nset_option -looplimit 10000\nset_option -place_option "
+          << placement
+          << "\nset_option -route_option 2\nset_option -timing_driven 1\nset_option -correct_hold_violation 1\nset_option -gen_text_timing_rpt 1\nset_option -use_cpu_as_gpio 1\nset_option -use_i2c_as_gpio 1\nset_option -use_mspi_as_gpio 1\nset_option -gen_sdf 1\nset_option -gen_verilog_sim_netlist 1\nrun all\n";
         f.close();
         if (tool == "--emit")
             return 0;
